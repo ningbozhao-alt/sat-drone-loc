@@ -12,6 +12,7 @@ GEOTIFF_CACHE = DATA / "tiles" / "geotiff"
 JOBS = DATA / "jobs"
 OFFLINE_DIR = DATA / "offline"
 SETTINGS_PATH = DATA / "settings.json"
+TARGETS_PATH = DATA / "targets.json"
 
 DEFAULT_TILE_URL = (
     "https://server.arcgisonline.com/ArcGIS/rest/services/"

@@ -19,6 +19,7 @@ from app.geo import gsd_m, pixel_to_lonlat, select_zoom
 from app.jobs import create_job, job_dir, load_meta, load_mosaic, save_meta
 from app.localize import localize, map_query_pixel
 from app.mosaic import build_mosaic
+from app.targets import clear_targets, delete_target, list_targets, upsert_target
 from app.tiles import (
     configure_offline,
     ensure_dirs,
@@ -65,6 +66,15 @@ class SettingsBody(BaseModel):
     tile_url: str = Field(default="")
 
 
+class TargetBody(BaseModel):
+    id: str
+    name: str
+    note: str = ""
+    lon: float
+    lat: float
+    kind: str = "target"
+
+
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")
@@ -72,6 +82,31 @@ def index():
 
 @app.get("/api/health")
 def health():
+    return {"ok": True}
+
+
+@app.get("/api/targets")
+def get_targets():
+    return list_targets()
+
+
+@app.post("/api/targets")
+def save_target(body: TargetBody):
+    try:
+        return upsert_target(body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/targets/clear")
+def clear_target_list():
+    clear_targets()
+    return {"ok": True}
+
+
+@app.delete("/api/targets/{target_id}")
+def remove_target(target_id: str):
+    delete_target(target_id)
     return {"ok": True}
 
 

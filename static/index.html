@@ -22,18 +22,55 @@
     body {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 392px;
+      grid-template-rows: 42px minmax(0, 1fr);
+      overflow: hidden;
       background: var(--bg);
       color: var(--text);
       font: 14px/1.45 "Segoe UI", "Microsoft YaHei", sans-serif;
     }
-    #map { min-height: 100vh; }
+    .topbar {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      display: flex;
+      align-items: center;
+      height: 42px;
+      padding: 0 14px;
+      background: #121a16;
+      border-bottom: 1px solid var(--line);
+    }
+    .menubar { display: flex; align-items: center; gap: 16px; min-width: 0; }
+    .brand {
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+    .menu-label { color: var(--muted); font-size: 12px; }
+    .seg {
+      display: flex;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .seg button {
+      flex: none;
+      border-radius: 0;
+      padding: 4px 12px;
+      background: transparent;
+      font-size: 13px;
+    }
+    .seg button.on { background: var(--amber); color: #1c1404; outline: none; font-weight: 650; }
+    .seg button.on:hover { background: #e2a322; }
+    #map { grid-column: 1; grid-row: 2; min-height: 0; height: 100%; }
     aside {
+      grid-column: 2;
+      grid-row: 2;
+      min-height: 0;
       border-left: 1px solid var(--line);
       background: var(--panel);
       overflow: auto;
       padding: 18px 18px 32px;
     }
-    h1 { font-size: 18px; font-weight: 650; margin: 0 0 4px; letter-spacing: 0.02em; }
     .lead { color: var(--muted); margin: 0 0 16px; }
     label { display: block; color: var(--muted); font-size: 12px; margin: 12px 0 6px; }
     select, input[type="text"], input[type="file"] {
@@ -78,20 +115,185 @@
       cursor: crosshair;
       background: #000;
     }
-    details { margin-top: 16px; color: var(--muted); }
+    .targets { margin-top: 18px; }
+    .target-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+    .target-head .title { color: var(--muted); font-size: 12px; letter-spacing: 0.04em; }
+    .target-head .count { font: 12px/1 Consolas, "Cascadia Mono", monospace; color: var(--text); }
+    .text-btn {
+      flex: none;
+      margin-left: auto;
+      padding: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .text-btn:hover { background: transparent; color: var(--danger); }
+    .target-frame {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #101614;
+      overflow: auto;
+    }
+    .target-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 12px;
+    }
+    .target-table th,
+    .target-table td {
+      padding: 6px 6px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: middle;
+    }
+    .target-table th {
+      position: sticky;
+      top: 0;
+      background: #141c18;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+    }
+    .target-table tbody tr:last-child td { border-bottom: 0; }
+    .target-table tbody tr.data { cursor: pointer; }
+    .target-table tbody tr.data:hover td { background: #1c2822; }
+    .target-table .num { font-family: Consolas, "Cascadia Mono", monospace; color: #d5e4db; }
+    .target-table .name-cell { display: flex; align-items: center; gap: 6px; }
+    .target-table .name-cell span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .target-table .note { color: #c5d5cc; }
+    .target-table tr.empty td {
+      padding: 14px 8px;
+      color: var(--muted);
+      text-align: center;
+      cursor: default;
+    }
+    .target-table button.icon {
+      flex: none;
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 18px;
+    }
+    .target-table button.icon:hover { background: #2a2422; color: var(--danger); }
+    .pip { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+    .pip.center { background: var(--amber); }
+    .pip.target { background: var(--danger); }
+    #panel-toggle {
+      position: fixed;
+      z-index: 30;
+      top: calc(50vh + 21px);
+      right: calc(392px - 14px);
+      transform: translateY(-50%);
+      display: grid;
+      place-items: center;
+      width: 16px;
+      height: 52px;
+      flex: none;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 4px 0 0 4px;
+      background: #24312b;
+    }
+    #panel-toggle:hover { background: #2d3d35; }
+    #panel-toggle .tri {
+      width: 0;
+      height: 0;
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+      border-left: 6px solid var(--text);
+    }
+    body.panel-hidden { grid-template-columns: minmax(0, 1fr); }
+    body.panel-hidden aside { display: none; }
+    body.panel-hidden #panel-toggle { right: 0; }
+    body.panel-hidden #panel-toggle .tri {
+      border-left: 0;
+      border-right: 6px solid var(--text);
+    }
     summary { cursor: pointer; color: var(--text); }
+    .maplibregl-popup-content {
+      background: #17211c;
+      color: #e7f0ea;
+      border: 1px solid #2c3b34;
+      border-radius: 6px;
+      padding: 8px 28px 8px 10px;
+      box-shadow: none;
+      font: 13px/1.45 Consolas, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    .maplibregl-popup-close-button { color: #e7f0ea; font-size: 16px; }
+    .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+    .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+    .maplibregl-popup-anchor-top-right .maplibregl-popup-tip { border-bottom-color: #17211c; }
+    .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+    .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+    .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip { border-top-color: #17211c; }
+    .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: #17211c; }
+    .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: #17211c; }
+    .point-label {
+      margin-left: 10px;
+      padding: 2px 6px;
+      border: 1px solid #2c3b34;
+      border-radius: 4px;
+      background: rgba(23, 33, 28, 0.92);
+      color: #e7f0ea;
+      font: 12px/1.4 "Segoe UI", "Microsoft YaHei", sans-serif;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .attr-form { min-width: 180px; }
+    .attr-form .attr-title { font-weight: 650; margin-bottom: 4px; }
+    .attr-form label { display: block; margin: 8px 0 0; color: #8ea497; font-size: 12px; }
+    .attr-form input, .attr-form textarea {
+      width: 100%;
+      margin-top: 4px;
+      padding: 4px 6px;
+      border: 1px solid #2c3b34;
+      border-radius: 4px;
+      background: #101614;
+      color: #e7f0ea;
+      font: 13px/1.4 "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    .attr-form button { width: 100%; margin-top: 8px; }
     @media (max-width: 900px) {
-      body { grid-template-columns: 1fr; }
-      #map { min-height: 58vh; }
-      aside { border-left: 0; border-top: 1px solid var(--line); }
+      body {
+        grid-template-columns: 1fr;
+        grid-template-rows: 42px minmax(240px, 58vh) auto;
+        overflow: auto;
+      }
+      #map { grid-column: 1; min-height: 240px; height: 58vh; }
+      aside { grid-column: 1; grid-row: 3; border-left: 0; border-top: 1px solid var(--line); }
+      #panel-toggle { top: calc(42px + 29vh); right: 10px; }
+      body.panel-hidden { grid-template-rows: 42px minmax(0, 1fr); overflow: hidden; }
+      body.panel-hidden #map { height: 100%; min-height: 0; }
+      body.panel-hidden #panel-toggle { top: auto; bottom: 12px; right: 10px; }
     }
   </style>
 </head>
 <body>
+  <header class="topbar">
+    <nav class="menubar" aria-label="主菜单">
+      <span class="brand">航拍瓦片定位</span>
+      <span class="menu-label">视图</span>
+      <div class="seg" role="group" aria-label="视图">
+        <button id="view-2d" type="button" class="on" aria-pressed="true">二维</button>
+        <button id="view-3d" type="button" aria-pressed="false" title="倾斜查看，按住右键旋转">三维</button>
+      </div>
+    </nav>
+  </header>
   <div id="map"></div>
+  <button id="panel-toggle" type="button" aria-expanded="true" aria-label="隐藏信息栏" title="隐藏信息栏"><span class="tri"></span></button>
   <aside>
-    <h1>航拍瓦片定位</h1>
-    <p class="lead">画出任务区，建立搜索底图，上传一张近垂直航拍。成功后在地图上标出图像中心，点击照片可追加目标点。</p>
+    <p class="lead">画出任务区，建立搜索底图，上传一张近垂直航拍。单击标绘点查看经纬度，双击可编辑名称和备注。</p>
 
     <label for="mode">底图来源</label>
     <select id="mode">
@@ -105,6 +307,9 @@
       <button id="build" class="primary" type="button">建立搜索底图</button>
     </div>
     <div class="bbox" id="bbox">尚未画矩形</div>
+    <div class="row" style="margin-top:8px">
+      <button id="clear" type="button">清除标绘</button>
+    </div>
 
     <label for="file">航拍图片</label>
     <input id="file" type="file" accept=".jpg,.jpeg,.png,.tif,.tiff,image/*">
@@ -113,11 +318,40 @@
       <button id="check" type="button">用底图自检</button>
     </div>
     <img id="shot" alt="航拍预览">
-    <p class="lead" id="shot-hint" style="display:none">定位成功后，点击照片上的位置，地图会追加该目标点。</p>
+    <p class="lead" id="shot-hint" style="display:none">定位成功后，点击照片追加目标点。地图上双击该点可改名称和备注。</p>
 
     <label>结果</label>
     <div id="status">等待任务区</div>
     <div class="result" id="result"></div>
+
+    <section class="targets">
+      <div class="target-head">
+        <span class="title">目标列表</span>
+        <span class="count" id="target-count">0</span>
+        <button id="clear-targets" class="text-btn" type="button">清空</button>
+      </div>
+      <div class="target-frame">
+        <table class="target-table">
+          <colgroup>
+            <col style="width:24%">
+            <col style="width:27%">
+            <col style="width:25%">
+            <col>
+            <col style="width:28px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>经度</th>
+              <th>纬度</th>
+              <th>备注</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="target-list"></tbody>
+        </table>
+      </div>
+    </section>
 
     <details>
       <summary>离线底图与瓦片地址</summary>
@@ -166,9 +400,43 @@
         layers: [{ id: "sat", type: "raster", source: "sat" }]
       },
       center: [104.2, 35.6],
-      zoom: 3.4
+      zoom: 3.4,
+      pitch: 0,
+      maxPitch: 70
     });
-    map.addControl(new maplibregl.NavigationControl(), "top-left");
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-left");
+    document.querySelector("#panel-toggle").addEventListener("click", () => {
+      const hidden = document.body.classList.toggle("panel-hidden");
+      const toggle = document.querySelector("#panel-toggle");
+      const label = hidden ? "显示信息栏" : "隐藏信息栏";
+      toggle.setAttribute("aria-expanded", String(!hidden));
+      toggle.setAttribute("aria-label", label);
+      toggle.title = label;
+      requestAnimationFrame(() => map.resize());
+    });
+
+    function setDimension(is3d) {
+      document.querySelector("#view-2d").classList.toggle("on", !is3d);
+      document.querySelector("#view-3d").classList.toggle("on", is3d);
+      document.querySelector("#view-2d").setAttribute("aria-pressed", String(!is3d));
+      document.querySelector("#view-3d").setAttribute("aria-pressed", String(is3d));
+      if (is3d) {
+        map.dragRotate.enable();
+        map.touchZoomRotate.enableRotation();
+        const bearing = Math.abs(map.getBearing()) < 1 ? -24 : map.getBearing();
+        map.easeTo({ pitch: 62, bearing, duration: 700 });
+        return;
+      }
+      map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
+      map.once("moveend", () => {
+        if (!document.querySelector("#view-2d").classList.contains("on")) return;
+        map.dragRotate.disable();
+        map.touchZoomRotate.disableRotation();
+      });
+    }
+    document.querySelector("#view-2d").addEventListener("click", () => setDimension(false));
+    document.querySelector("#view-3d").addEventListener("click", () => setDimension(true));
+
     map.dragRotate.disable();
     map.touchZoomRotate.disableRotation();
 
@@ -200,7 +468,7 @@
         source: "marks",
         filter: ["==", ["get", "kind"], "center"],
         paint: {
-          "circle-radius": 7,
+          "circle-radius": 8,
           "circle-color": "#e2a322",
           "circle-stroke-width": 2,
           "circle-stroke-color": "#1c1404"
@@ -212,13 +480,105 @@
         source: "marks",
         filter: ["==", ["get", "kind"], "target"],
         paint: {
-          "circle-radius": 6,
+          "circle-radius": 8,
           "circle-color": "#e36a5d",
           "circle-stroke-width": 2,
           "circle-stroke-color": "#fff4f2"
         }
       });
+      for (const layerId of ["center", "target"]) {
+        map.on("click", layerId, (event) => {
+          if (drawMode || !event.features || !event.features.length) return;
+          openPointPopup(event.lngLat, event.features[0].properties.id);
+        });
+        map.on("mouseenter", layerId, () => {
+          if (!drawMode) map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", layerId, () => {
+          map.getCanvas().style.cursor = drawMode ? "crosshair" : "";
+        });
+      }
+      map.on("dblclick", (event) => {
+        if (drawMode) return;
+        const hits = map.queryRenderedFeatures(event.point, { layers: ["center", "target"] });
+        if (!hits.length) return;
+        event.preventDefault();
+        openEditPopup(event.lngLat, hits[0].properties.id);
+      });
+      loadTargets();
     });
+
+    let pointPopup = null;
+    let markSeq = 0;
+    let targetCount = 0;
+    const labelMarkers = [];
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+      }[ch]));
+    }
+
+    function featureById(id) {
+      return markFeatures.find((feature) => feature.properties.id === id);
+    }
+
+    function openPointPopup(lngLat, id) {
+      const feature = featureById(id);
+      if (!feature) return;
+      const props = feature.properties;
+      if (pointPopup) pointPopup.remove();
+      const note = props.note ? `<div>${escapeHtml(props.note)}</div>` : "";
+      pointPopup = new maplibregl.Popup({ closeButton: true, maxWidth: "260px" })
+        .setLngLat(lngLat)
+        .setHTML(
+          `<strong>${escapeHtml(props.name)}</strong>` +
+          `<div>经度 ${Number(props.lon).toFixed(6)}</div>` +
+          `<div>纬度 ${Number(props.lat).toFixed(6)}</div>` +
+          note +
+          `<div style="color:#8ea497;margin-top:4px">双击可编辑文字</div>`
+        )
+        .addTo(map);
+    }
+
+    function openEditPopup(lngLat, id) {
+      const feature = featureById(id);
+      if (!feature) return;
+      const props = feature.properties;
+      if (pointPopup) pointPopup.remove();
+      pointPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: "280px" })
+        .setLngLat(lngLat)
+        .setHTML(
+          `<form class="attr-form">` +
+          `<div class="attr-title">文字属性</div>` +
+          `<label>名称<input name="name" maxlength="40" value="${escapeHtml(props.name)}"></label>` +
+          `<label>备注<textarea name="note" maxlength="200" rows="3">${escapeHtml(props.note || "")}</textarea></label>` +
+          `<button type="submit">保存</button>` +
+          `</form>`
+        )
+        .addTo(map);
+      const form = pointPopup.getElement().querySelector("form");
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const name = form.querySelector('input[name="name"]').value.trim();
+        feature.properties.name = name || props.name;
+        feature.properties.note = form.querySelector('textarea[name="note"]').value.trim();
+        publishMarks();
+        saveTarget(feature.properties);
+        openPointPopup(lngLat, id);
+        setStatus(`已保存「${feature.properties.name}」的文字属性`, "good");
+      });
+    }
+
+    function closePointPopup() {
+      if (!pointPopup) return;
+      pointPopup.remove();
+      pointPopup = null;
+    }
 
     function emptyCollection() {
       return { type: "FeatureCollection", features: [] };
@@ -291,7 +651,7 @@
     });
 
     function busy(on) {
-      for (const id of ["build", "go", "check", "draw"]) {
+      for (const id of ["build", "go", "check", "draw", "clear"]) {
         document.querySelector("#" + id).disabled = on;
       }
     }
@@ -335,21 +695,212 @@
     function publishMarks() {
       const source = map.getSource("marks");
       if (source) source.setData({ type: "FeatureCollection", features: markFeatures });
+      refreshLabels();
+    }
+
+    function refreshLabels() {
+      while (labelMarkers.length) labelMarkers.pop().remove();
+      for (const feature of markFeatures) {
+        if (feature.geometry.type !== "Point") continue;
+        const props = feature.properties;
+        const element = document.createElement("div");
+        element.className = "point-label";
+        element.textContent = props.name || "";
+        element.title = "双击编辑文字";
+        element.addEventListener("dblclick", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openEditPopup(feature.geometry.coordinates, props.id);
+        });
+        element.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openPointPopup(feature.geometry.coordinates, props.id);
+        });
+        const marker = new maplibregl.Marker({ element: element, anchor: "left" })
+          .setLngLat(feature.geometry.coordinates)
+          .addTo(map);
+        labelMarkers.push(marker);
+      }
     }
 
     function clearMarks() {
       markFeatures = [];
+      targetCount = 0;
       publishMarks();
+      closePointPopup();
     }
 
-    function addMark(kind, lon, lat, geometry) {
+    function addMark(kind, lon, lat, geometry, saved) {
+      const properties = {
+        kind: kind,
+        id: "m" + (++markSeq),
+        targetId: saved ? saved.id : crypto.randomUUID(),
+        name: saved ? saved.name : "",
+        note: saved ? (saved.note || "") : ""
+      };
+      if (!saved && kind === "center") properties.name = "图像中心";
+      if (!saved && kind === "target") {
+        targetCount += 1;
+        properties.name = targetCount === 1 ? "目标点" : "目标点 " + targetCount;
+      }
+      if (lon != null && lat != null) {
+        properties.lon = lon;
+        properties.lat = lat;
+      }
       markFeatures.push({
         type: "Feature",
-        properties: { kind },
+        properties: properties,
         geometry: geometry || { type: "Point", coordinates: [lon, lat] }
       });
       publishMarks();
+      if (!saved && (kind === "center" || kind === "target")) saveTarget(properties);
+      return markFeatures[markFeatures.length - 1];
     }
+
+    let savedTargets = [];
+
+    function ensureMark(item) {
+      const existing = markFeatures.find((feature) => feature.properties.targetId === item.id);
+      if (existing) {
+        existing.properties.name = item.name;
+        existing.properties.note = item.note || "";
+        existing.properties.lon = item.lon;
+        existing.properties.lat = item.lat;
+        existing.geometry.coordinates = [item.lon, item.lat];
+        publishMarks();
+        return existing;
+      }
+      return addMark(item.kind || "target", item.lon, item.lat, null, item);
+    }
+
+    async function loadTargets() {
+      const response = await fetch("/api/targets");
+      if (!response.ok) return;
+      savedTargets = await response.json();
+      renderTargetList();
+      for (const item of savedTargets) ensureMark(item);
+    }
+
+    async function saveTarget(props) {
+      const response = await fetch("/api/targets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: props.targetId,
+          name: props.name,
+          note: props.note || "",
+          lon: props.lon,
+          lat: props.lat,
+          kind: props.kind
+        })
+      });
+      if (!response.ok) {
+        setStatus(await readError(response), "bad");
+        return;
+      }
+      const saved = await response.json();
+      const index = savedTargets.findIndex((item) => item.id === saved.id);
+      if (index >= 0) savedTargets[index] = saved;
+      else savedTargets.unshift(saved);
+      renderTargetList();
+    }
+
+    function renderTargetList() {
+      const list = document.querySelector("#target-list");
+      list.replaceChildren();
+      document.querySelector("#target-count").textContent = String(savedTargets.length);
+      if (!savedTargets.length) {
+        const empty = document.createElement("tr");
+        empty.className = "empty";
+        empty.innerHTML = `<td colspan="5">还没有定位目标。双击一行可回到地图。</td>`;
+        list.appendChild(empty);
+        return;
+      }
+      for (const item of savedTargets) {
+        const row = document.createElement("tr");
+        const kind = item.kind === "center" ? "center" : "target";
+        row.className = "data";
+        row.title = "双击回到地图上的这个点";
+        row.innerHTML =
+          `<td><span class="name-cell"><span class="pip ${kind}"></span><span></span></span></td>` +
+          `<td class="num"></td><td class="num"></td><td class="note"></td>` +
+          `<td><button type="button" class="icon" title="删除" aria-label="删除">×</button></td>`;
+        row.querySelector(".name-cell span:last-child").textContent = item.name;
+        const nums = row.querySelectorAll(".num");
+        nums[0].textContent = Number(item.lon).toFixed(6);
+        nums[1].textContent = Number(item.lat).toFixed(6);
+        row.querySelector(".note").textContent = item.note || "";
+        row.addEventListener("dblclick", (event) => {
+          if (event.target.closest("button")) return;
+          focusTarget(item.id);
+        });
+        row.querySelector("button").addEventListener("click", (event) => {
+          event.stopPropagation();
+          removeSavedTarget(item.id);
+        });
+        list.appendChild(row);
+      }
+    }
+
+    function focusTarget(id) {
+      const item = savedTargets.find((row) => row.id === id);
+      if (!item) return;
+      const feature = ensureMark(item);
+      map.flyTo({ center: [item.lon, item.lat], zoom: Math.max(map.getZoom(), 15) });
+      openPointPopup([item.lon, item.lat], feature.properties.id);
+    }
+
+    async function removeSavedTarget(id) {
+      const response = await fetch("/api/targets/" + id, { method: "DELETE" });
+      if (!response.ok) {
+        setStatus(await readError(response), "bad");
+        return;
+      }
+      savedTargets = savedTargets.filter((item) => item.id !== id);
+      markFeatures = markFeatures.filter((feature) => feature.properties.targetId !== id);
+      publishMarks();
+      closePointPopup();
+      renderTargetList();
+    }
+
+    document.querySelector("#clear-targets").addEventListener("click", async () => {
+      const response = await fetch("/api/targets/clear", { method: "POST" });
+      if (!response.ok) {
+        setStatus(await readError(response), "bad");
+        return;
+      }
+      const ids = new Set(savedTargets.map((item) => item.id));
+      savedTargets = [];
+      markFeatures = markFeatures.filter((feature) => !ids.has(feature.properties.targetId));
+      publishMarks();
+      closePointPopup();
+      renderTargetList();
+      setStatus("目标列表已清空");
+    });
+
+    function clearPlot() {
+      closePointPopup();
+      aoi = null;
+      dragStart = null;
+      drawMode = false;
+      localized = false;
+      jobId = null;
+      document.querySelector("#draw").classList.remove("on");
+      map.dragPan.enable();
+      map.getCanvas().style.cursor = "";
+      const aoiSource = map.getSource("aoi");
+      if (aoiSource) aoiSource.setData(emptyCollection());
+      bboxEl.textContent = "尚未画矩形";
+      clearMarks();
+      resultEl.textContent = "";
+      shot.removeAttribute("src");
+      shot.style.display = "none";
+      document.querySelector("#shot-hint").style.display = "none";
+      document.querySelector("#file").value = "";
+      setStatus("已清除任务区和当前标绘。目标列表仍保留，双击列表可回到该位置。");
+    }
+
+    document.querySelector("#clear").addEventListener("click", clearPlot);
 
     function formatResult(data) {
       if (!data.ok) return data.reason || "定位失败";
@@ -401,7 +952,7 @@
         addMark("foot", null, null, { type: "LineString", coordinates: ringCoords });
         addMark("center", data.center.lon, data.center.lat);
         map.flyTo({ center: [data.center.lon, data.center.lat], zoom: Math.max(map.getZoom(), 15) });
-        setStatus("已标出图像中心。点击照片可追加目标点。", "good");
+        setStatus("已标出图像中心。单击查看经纬度，双击编辑名称和备注。", "good");
       } catch (err) {
         setStatus(err.message, "bad");
       } finally {

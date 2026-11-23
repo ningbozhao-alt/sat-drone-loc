@@ -6,6 +6,7 @@ data/tiles/
 data/jobs/
 data/offline/
 data/settings.json
+data/targets.json
 *.mbtiles
 *.tif
 *.tiff

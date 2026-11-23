@@ -1,0 +1,9 @@
+fastapi>=0.115
+uvicorn>=0.32
+python-multipart>=0.0.12
+opencv-contrib-python>=4.10
+numpy>=1.26
+pillow>=10.4
+mercantile>=1.2.1
+pyproj>=3.6
+rasterio>=1.4

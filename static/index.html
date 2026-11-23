@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>航拍瓦片定位</title>
+  <link rel="stylesheet" href="/static/vendor/maplibre-gl.css">
+  <style>
+    :root {
+      --bg: #101614;
+      --panel: #18211d;
+      --line: #2c3b34;
+      --text: #e7f0ea;
+      --muted: #8ea497;
+      --amber: #e2a322;
+      --green: #7dcea0;
+      --danger: #e36a5d;
+      --ok: #3e9b6e;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 392px;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    #map { min-height: 100vh; }
+    aside {
+      border-left: 1px solid var(--line);
+      background: var(--panel);
+      overflow: auto;
+      padding: 18px 18px 32px;
+    }
+    h1 { font-size: 18px; font-weight: 650; margin: 0 0 4px; letter-spacing: 0.02em; }
+    .lead { color: var(--muted); margin: 0 0 16px; }
+    label { display: block; color: var(--muted); font-size: 12px; margin: 12px 0 6px; }
+    select, input[type="text"], input[type="file"] {
+      width: 100%;
+      background: #101614;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    .row { display: flex; gap: 8px; }
+    button {
+      flex: 1;
+      border: 0;
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: #24312b;
+      color: var(--text);
+      cursor: pointer;
+    }
+    button:hover { background: #2d3d35; }
+    button.primary { background: var(--amber); color: #1c1404; font-weight: 650; }
+    button.on { outline: 2px solid var(--amber); }
+    button:disabled { opacity: 0.55; cursor: wait; }
+    .bbox, .result, #status {
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      background: #101614;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      min-height: 38px;
+    }
+    #status.bad { color: var(--danger); }
+    #status.good { color: var(--green); }
+    #shot {
+      display: none;
+      width: 100%;
+      margin-top: 8px;
+      border-radius: 6px;
+      cursor: crosshair;
+      background: #000;
+    }
+    details { margin-top: 16px; color: var(--muted); }
+    summary { cursor: pointer; color: var(--text); }
+    @media (max-width: 900px) {
+      body { grid-template-columns: 1fr; }
+      #map { min-height: 58vh; }
+      aside { border-left: 0; border-top: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <aside>
+    <h1>航拍瓦片定位</h1>
+    <p class="lead">画出任务区，建立搜索底图，上传一张近垂直航拍。成功后在地图上标出图像中心，点击照片可追加目标点。</p>
+
+    <label for="mode">底图来源</label>
+    <select id="mode">
+      <option value="online">在线卫星</option>
+      <option value="cache">已缓存</option>
+      <option value="offline">离线包</option>
+    </select>
+
+    <div class="row" style="margin-top:12px">
+      <button id="draw" type="button">画任务区</button>
+      <button id="build" class="primary" type="button">建立搜索底图</button>
+    </div>
+    <div class="bbox" id="bbox">尚未画矩形</div>
+
+    <label for="file">航拍图片</label>
+    <input id="file" type="file" accept=".jpg,.jpeg,.png,.tif,.tiff,image/*">
+    <div class="row" style="margin-top:10px">
+      <button id="go" class="primary" type="button">上传并定位</button>
+      <button id="check" type="button">用底图自检</button>
+    </div>
+    <img id="shot" alt="航拍预览">
+    <p class="lead" id="shot-hint" style="display:none">定位成功后，点击照片上的位置，地图会追加该目标点。</p>
+
+    <label>结果</label>
+    <div id="status">等待任务区</div>
+    <div class="result" id="result"></div>
+
+    <details>
+      <summary>离线底图与瓦片地址</summary>
+      <label for="tile-url">瓦片 URL 模板</label>
+      <input id="tile-url" type="text" spellcheck="false">
+      <button id="save-url" type="button" style="margin-top:8px;width:100%">保存瓦片地址</button>
+      <label for="xyz">本机 XYZ 目录</label>
+      <input id="xyz" type="text" placeholder="E:\maps\xyz">
+      <button id="use-xyz" type="button" style="margin-top:8px;width:100%">使用该目录</button>
+      <label for="pack">上传 MBTiles 或 GeoTIFF</label>
+      <input id="pack" type="file" accept=".mbtiles,.tif,.tiff">
+      <button id="use-pack" type="button" style="margin-top:8px;width:100%">导入离线包</button>
+    </details>
+  </aside>
+  <script src="/static/vendor/maplibre-gl.js"></script>
+  <script>
+    const modeEl = document.querySelector("#mode");
+    const bboxEl = document.querySelector("#bbox");
+    const statusEl = document.querySelector("#status");
+    const resultEl = document.querySelector("#result");
+    const shot = document.querySelector("#shot");
+    let mode = "online";
+    let drawMode = false;
+    let dragStart = null;
+    let aoi = null;
+    let jobId = null;
+    let localized = false;
+    let markFeatures = [];
+
+    function tileTemplate() {
+      return `/tiles/{z}/{x}/{y}.png?mode=${encodeURIComponent(mode)}`;
+    }
+
+    const map = new maplibregl.Map({
+      container: "map",
+      style: {
+        version: 8,
+        sources: {
+          sat: {
+            type: "raster",
+            tiles: [tileTemplate()],
+            tileSize: 256,
+            attribution: "影像来自当前瓦片源"
+          }
+        },
+        layers: [{ id: "sat", type: "raster", source: "sat" }]
+      },
+      center: [104.2, 35.6],
+      zoom: 3.4
+    });
+    map.addControl(new maplibregl.NavigationControl(), "top-left");
+    map.dragRotate.disable();
+    map.touchZoomRotate.disableRotation();
+
+    map.on("load", () => {
+      map.addSource("aoi", { type: "geojson", data: emptyCollection() });
+      map.addLayer({
+        id: "aoi-fill",
+        type: "fill",
+        source: "aoi",
+        paint: { "fill-color": "#e2a322", "fill-opacity": 0.12 }
+      });
+      map.addLayer({
+        id: "aoi-line",
+        type: "line",
+        source: "aoi",
+        paint: { "line-color": "#e2a322", "line-width": 2 }
+      });
+      map.addSource("marks", { type: "geojson", data: emptyCollection() });
+      map.addLayer({
+        id: "foot",
+        type: "line",
+        source: "marks",
+        filter: ["==", ["get", "kind"], "foot"],
+        paint: { "line-color": "#7dcea0", "line-width": 2 }
+      });
+      map.addLayer({
+        id: "center",
+        type: "circle",
+        source: "marks",
+        filter: ["==", ["get", "kind"], "center"],
+        paint: {
+          "circle-radius": 7,
+          "circle-color": "#e2a322",
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#1c1404"
+        }
+      });
+      map.addLayer({
+        id: "target",
+        type: "circle",
+        source: "marks",
+        filter: ["==", ["get", "kind"], "target"],
+        paint: {
+          "circle-radius": 6,
+          "circle-color": "#e36a5d",
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#fff4f2"
+        }
+      });
+    });
+
+    function emptyCollection() {
+      return { type: "FeatureCollection", features: [] };
+    }
+
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      statusEl.className = kind || "";
+    }
+
+    function ring(box) {
+      return [
+        [box.west, box.north],
+        [box.east, box.north],
+        [box.east, box.south],
+        [box.west, box.south],
+        [box.west, box.north]
+      ];
+    }
+
+    function showAoi(box) {
+      if (!map.getSource("aoi")) return;
+      map.getSource("aoi").setData({
+        type: "Feature",
+        geometry: { type: "Polygon", coordinates: [ring(box)] },
+        properties: {}
+      });
+      bboxEl.textContent = `W ${box.west.toFixed(5)}\nS ${box.south.toFixed(5)}\nE ${box.east.toFixed(5)}\nN ${box.north.toFixed(5)}`;
+    }
+
+    function boundsOf(a, b) {
+      return {
+        west: Math.min(a.lng, b.lng),
+        east: Math.max(a.lng, b.lng),
+        south: Math.min(a.lat, b.lat),
+        north: Math.max(a.lat, b.lat)
+      };
+    }
+
+    document.querySelector("#draw").addEventListener("click", () => {
+      drawMode = !drawMode;
+      document.querySelector("#draw").classList.toggle("on", drawMode);
+      map.getCanvas().style.cursor = drawMode ? "crosshair" : "";
+      if (drawMode) map.dragPan.disable();
+      else map.dragPan.enable();
+    });
+
+    map.on("mousedown", (event) => {
+      if (!drawMode) return;
+      dragStart = event.lngLat;
+      map.dragPan.disable();
+    });
+    map.on("mousemove", (event) => {
+      if (!dragStart) return;
+      aoi = boundsOf(dragStart, event.lngLat);
+      showAoi(aoi);
+    });
+    window.addEventListener("mouseup", (event) => {
+      if (!dragStart) return;
+      dragStart = null;
+      if (aoi && Math.abs(aoi.east - aoi.west) < 0.0002) {
+        setStatus("矩形太小，请重新画任务区", "bad");
+      }
+    });
+
+    modeEl.addEventListener("change", () => {
+      mode = modeEl.value;
+      const source = map.getSource("sat");
+      if (source && source.setTiles) source.setTiles([tileTemplate()]);
+    });
+
+    function busy(on) {
+      for (const id of ["build", "go", "check", "draw"]) {
+        document.querySelector("#" + id).disabled = on;
+      }
+    }
+
+    async function readError(response) {
+      try {
+        const data = await response.json();
+        return data.detail || response.statusText;
+      } catch (_err) {
+        return response.statusText;
+      }
+    }
+
+    document.querySelector("#build").addEventListener("click", async () => {
+      if (!aoi) {
+        setStatus("请先画任务区", "bad");
+        return;
+      }
+      busy(true);
+      setStatus("正在读取瓦片并拼接搜索底图…");
+      clearMarks();
+      localized = false;
+      try {
+        const response = await fetch("/api/aoi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...aoi, source: mode })
+        });
+        if (!response.ok) throw new Error(await readError(response));
+        const data = await response.json();
+        jobId = data.job_id;
+        setStatus(`底图已建立。zoom ${data.zoom}，${data.width}×${data.height}，地面分辨率 ${data.gsd_m} 米/像素`, "good");
+        resultEl.textContent = `瓦片 ${data.tile_count} 张`;
+      } catch (err) {
+        setStatus(err.message, "bad");
+      } finally {
+        busy(false);
+      }
+    });
+
+    function publishMarks() {
+      const source = map.getSource("marks");
+      if (source) source.setData({ type: "FeatureCollection", features: markFeatures });
+    }
+
+    function clearMarks() {
+      markFeatures = [];
+      publishMarks();
+    }
+
+    function addMark(kind, lon, lat, geometry) {
+      markFeatures.push({
+        type: "Feature",
+        properties: { kind },
+        geometry: geometry || { type: "Point", coordinates: [lon, lat] }
+      });
+      publishMarks();
+    }
+
+    function formatResult(data) {
+      if (!data.ok) return data.reason || "定位失败";
+      const c = data.center;
+      const lines = [
+        `中心 ${c.lon.toFixed(6)}, ${c.lat.toFixed(6)}`,
+        `内点 ${data.inliers}，重投影 ${data.reproj_error_px.toFixed(2)} px`,
+        `置信度 ${(data.confidence * 100).toFixed(0)}%`
+      ];
+      data.footprint.forEach((p, i) => {
+        lines.push(`角${i + 1} ${p.lon.toFixed(6)}, ${p.lat.toFixed(6)}`);
+      });
+      return lines.join("\n");
+    }
+
+    document.querySelector("#go").addEventListener("click", async () => {
+      if (!jobId) {
+        setStatus("请先建立搜索底图", "bad");
+        return;
+      }
+      const file = document.querySelector("#file").files[0];
+      if (!file) {
+        setStatus("请选择航拍图片", "bad");
+        return;
+      }
+      busy(true);
+      setStatus("正在匹配…");
+      clearMarks();
+      localized = false;
+      shot.src = URL.createObjectURL(file);
+      shot.style.display = "block";
+      document.querySelector("#shot-hint").style.display = "block";
+      try {
+        const body = new FormData();
+        body.append("job_id", jobId);
+        body.append("file", file);
+        const response = await fetch("/api/localize", { method: "POST", body });
+        if (!response.ok) throw new Error(await readError(response));
+        const data = await response.json();
+        resultEl.textContent = formatResult(data);
+        if (!data.ok) {
+          localized = false;
+          setStatus(data.reason || "置信度不足，未放置确定点", "bad");
+          return;
+        }
+        localized = true;
+        const ringCoords = data.footprint.map((p) => [p.lon, p.lat]);
+        ringCoords.push(ringCoords[0]);
+        addMark("foot", null, null, { type: "LineString", coordinates: ringCoords });
+        addMark("center", data.center.lon, data.center.lat);
+        map.flyTo({ center: [data.center.lon, data.center.lat], zoom: Math.max(map.getZoom(), 15) });
+        setStatus("已标出图像中心。点击照片可追加目标点。", "good");
+      } catch (err) {
+        setStatus(err.message, "bad");
+      } finally {
+        busy(false);
+      }
+    });
+
+    shot.addEventListener("click", async (event) => {
+      if (!localized || !jobId) return;
+      const rect = shot.getBoundingClientRect();
+      const x = (event.clientX - rect.left) * shot.naturalWidth / rect.width;
+      const y = (event.clientY - rect.top) * shot.naturalHeight / rect.height;
+      try {
+        const response = await fetch("/api/point", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ job_id: jobId, x, y })
+        });
+        if (!response.ok) throw new Error(await readError(response));
+        const data = await response.json();
+        addMark("target", data.lon, data.lat);
+        const extra = `\n目标点 ${data.lon.toFixed(6)}, ${data.lat.toFixed(6)}`;
+        if (!resultEl.textContent.includes(extra.trim())) resultEl.textContent += extra;
+      } catch (err) {
+        setStatus(err.message, "bad");
+      }
+    });
+
+    document.querySelector("#check").addEventListener("click", async () => {
+      if (!jobId) {
+        setStatus("请先建立搜索底图", "bad");
+        return;
+      }
+      busy(true);
+      setStatus("正在用镶嵌图裁块自检，可能需要一会儿…");
+      try {
+        const response = await fetch("/api/self-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ job_id: jobId })
+        });
+        if (!response.ok) throw new Error(await readError(response));
+        const data = await response.json();
+        const straight = data.straight_error_px == null ? data.straight_reason : data.straight_error_px.toFixed(2) + " px";
+        const rotated = data.rotated_error_px == null ? data.rotated_reason : data.rotated_error_px.toFixed(2) + " px";
+        resultEl.textContent = `正放误差 ${straight}\n旋转 90° 误差 ${rotated}\n无关图已拒绝 ${data.unrelated_rejected ? "是" : "否"} ${data.unrelated_reason}`;
+        setStatus(data.ok ? "自检通过" : "自检未通过", data.ok ? "good" : "bad");
+      } catch (err) {
+        setStatus(err.message, "bad");
+      } finally {
+        busy(false);
+      }
+    });
+
+    async function loadSettings() {
+      const response = await fetch("/api/settings");
+      if (!response.ok) return;
+      const data = await response.json();
+      document.querySelector("#tile-url").value = data.tile_url || "";
+      if (data.offline && data.offline.kind === "xyz") {
+        document.querySelector("#xyz").value = data.offline.path || "";
+      }
+    }
+    loadSettings();
+
+    document.querySelector("#save-url").addEventListener("click", async () => {
+      const tile_url = document.querySelector("#tile-url").value.trim();
+      const response = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tile_url })
+      });
+      setStatus(response.ok ? "瓦片地址已保存" : await readError(response), response.ok ? "good" : "bad");
+    });
+
+    document.querySelector("#use-xyz").addEventListener("click", async () => {
+      const body = new FormData();
+      body.append("xyz_dir", document.querySelector("#xyz").value.trim());
+      const response = await fetch("/api/offline", { method: "POST", body });
+      if (!response.ok) {
+        setStatus(await readError(response), "bad");
+        return;
+      }
+      mode = "offline";
+      modeEl.value = "offline";
+      map.getSource("sat").setTiles([tileTemplate()]);
+      setStatus("已切换到 XYZ 离线目录", "good");
+    });
+
+    document.querySelector("#use-pack").addEventListener("click", async () => {
+      const file = document.querySelector("#pack").files[0];
+      if (!file) {
+        setStatus("请选择 MBTiles 或 GeoTIFF", "bad");
+        return;
+      }
+      const body = new FormData();
+      body.append("file", file);
+      setStatus("正在导入离线包…");
+      const response = await fetch("/api/offline", { method: "POST", body });
+      if (!response.ok) {
+        setStatus(await readError(response), "bad");
+        return;
+      }
+      mode = "offline";
+      modeEl.value = "offline";
+      map.getSource("sat").setTiles([tileTemplate()]);
+      setStatus("离线包已导入", "good");
+    });
+  </script>
+</body>
+</html>

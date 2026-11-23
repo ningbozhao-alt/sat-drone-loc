@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/tiles/
+data/jobs/
+data/offline/
+data/settings.json
+*.mbtiles
+*.tif
+*.tiff

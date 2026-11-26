@@ -33,6 +33,7 @@
       grid-row: 1;
       display: flex;
       align-items: center;
+      gap: 16px;
       height: 42px;
       padding: 0 14px;
       background: #121a16;
@@ -61,6 +62,50 @@
     }
     .seg button.on { background: var(--amber); color: #1c1404; outline: none; font-weight: 650; }
     .seg button.on:hover { background: #e2a322; }
+    .place-search { position: relative; margin-left: auto; width: min(280px, 34vw); }
+    .place-search input[type="search"] {
+      width: 100%;
+      padding: 5px 10px;
+      border-radius: 6px;
+    }
+    .place-search input:disabled { opacity: 0.55; }
+    #place-results {
+      position: absolute;
+      z-index: 40;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      margin: 0;
+      padding: 4px;
+      list-style: none;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #17211c;
+      max-height: 240px;
+      overflow: auto;
+    }
+    #place-results button {
+      flex: none;
+      width: 100%;
+      padding: 7px 8px;
+      border-radius: 4px;
+      background: transparent;
+      text-align: left;
+      font-size: 13px;
+    }
+    #map-hud {
+      position: absolute;
+      z-index: 6;
+      left: 10px;
+      bottom: 8px;
+      pointer-events: none;
+      padding: 4px 8px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(16, 22, 20, 0.9);
+      color: #d5e4db;
+      font: 12px/1.4 Consolas, "Cascadia Mono", monospace;
+    }
     #map { grid-column: 1; grid-row: 2; min-height: 0; height: 100%; }
     #aoi-banner {
       position: absolute;
@@ -131,7 +176,7 @@
     }
     .lead { color: var(--muted); margin: 0 0 16px; }
     label { display: block; color: var(--muted); font-size: 12px; margin: 12px 0 6px; }
-    select, input[type="text"], input[type="file"] {
+    select, input[type="text"], input[type="search"], input[type="file"] {
       width: 100%;
       background: #101614;
       color: var(--text);
@@ -347,6 +392,10 @@
         <button id="view-3d" type="button" aria-pressed="false" title="倾斜查看，按住右键旋转">三维</button>
       </div>
     </nav>
+    <form id="place-search" class="place-search" role="search">
+      <input id="place-query" type="search" placeholder="搜索在线地点" autocomplete="off" spellcheck="false">
+      <ul id="place-results" hidden></ul>
+    </form>
   </header>
   <div id="map"></div>
   <button id="panel-toggle" type="button" aria-expanded="true" aria-label="隐藏信息栏" title="隐藏信息栏"><span class="tri"></span></button>
@@ -467,6 +516,11 @@
       maxPitch: 70
     });
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-left");
+    const mapHud = document.createElement("div");
+    mapHud.id = "map-hud";
+    mapHud.textContent = "层级 —";
+    map.getContainer().appendChild(mapHud);
+    let pointerLngLat = null;
     const aoiBanner = document.createElement("div");
     aoiBanner.id = "aoi-banner";
     aoiBanner.hidden = true;
@@ -770,6 +824,15 @@
       else map.dragPan.enable();
     });
 
+    function renderMapHud() {
+      const zoom = `层级 ${map.getZoom().toFixed(1)}`;
+      if (!pointerLngLat) {
+        mapHud.textContent = zoom;
+        return;
+      }
+      mapHud.textContent = `经度 ${pointerLngLat.lng.toFixed(6)}   纬度 ${pointerLngLat.lat.toFixed(6)}   ${zoom}`;
+    }
+
     function trackAoi(lngLat) {
       if (!dragStart || !lngLat) return;
       aoi = boundsOf(dragStart, lngLat);
@@ -781,11 +844,24 @@
       dragStart = event.lngLat;
       map.dragPan.disable();
     });
-    map.on("mousemove", (event) => trackAoi(event.lngLat));
+    map.on("mousemove", (event) => {
+      pointerLngLat = event.lngLat;
+      renderMapHud();
+      trackAoi(event.lngLat);
+    });
+    map.on("mouseout", () => {
+      pointerLngLat = null;
+      renderMapHud();
+    });
+    map.on("zoom", renderMapHud);
+    renderMapHud();
     window.addEventListener("pointermove", (event) => {
       if (!dragStart || event.buttons === 0) return;
       const rect = map.getCanvas().getBoundingClientRect();
-      trackAoi(map.unproject([event.clientX - rect.left, event.clientY - rect.top]));
+      const lngLat = map.unproject([event.clientX - rect.left, event.clientY - rect.top]);
+      pointerLngLat = lngLat;
+      renderMapHud();
+      trackAoi(lngLat);
     });
     window.addEventListener("mouseup", (event) => {
       if (!dragStart) return;
@@ -799,7 +875,74 @@
       mode = modeEl.value;
       const source = map.getSource("sat");
       if (source && source.setTiles) source.setTiles([tileTemplate()]);
+      syncPlaceSearch();
     });
+
+    const placeQuery = document.querySelector("#place-query");
+    const placeResults = document.querySelector("#place-results");
+    let placeTimer = 0;
+
+    function syncPlaceSearch() {
+      const online = mode === "online";
+      placeQuery.disabled = !online;
+      placeQuery.placeholder = online ? "搜索在线地点" : "仅在线底图可搜索地点";
+      if (!online) placeResults.hidden = true;
+    }
+
+    function renderPlaces(places) {
+      placeResults.replaceChildren();
+      if (!places.length) {
+        const item = document.createElement("li");
+        item.textContent = "没有匹配的地点";
+        item.style.padding = "7px 8px";
+        item.style.color = "var(--muted)";
+        placeResults.appendChild(item);
+        placeResults.hidden = false;
+        return;
+      }
+      for (const place of places) {
+        const item = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = place.label;
+        button.addEventListener("click", () => {
+          placeResults.hidden = true;
+          placeQuery.value = place.name;
+          map.flyTo({ center: [place.lon, place.lat], zoom: Math.max(map.getZoom(), 13) });
+        });
+        item.appendChild(button);
+        placeResults.appendChild(item);
+      }
+      placeResults.hidden = false;
+    }
+
+    async function searchPlaces() {
+      const query = placeQuery.value.trim();
+      if (mode !== "online" || query.length < 2) {
+        placeResults.hidden = true;
+        return;
+      }
+      const response = await fetch("/api/geocode?q=" + encodeURIComponent(query));
+      if (!response.ok) {
+        setStatus(await readError(response), "bad");
+        return;
+      }
+      renderPlaces(await response.json());
+    }
+
+    placeQuery.addEventListener("input", () => {
+      window.clearTimeout(placeTimer);
+      placeTimer = window.setTimeout(searchPlaces, 300);
+    });
+    document.querySelector("#place-search").addEventListener("submit", (event) => {
+      event.preventDefault();
+      window.clearTimeout(placeTimer);
+      searchPlaces();
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!document.querySelector("#place-search").contains(event.target)) placeResults.hidden = true;
+    });
+    syncPlaceSearch();
 
     function busy(on) {
       for (const id of ["build", "go", "check", "draw", "clear"]) {

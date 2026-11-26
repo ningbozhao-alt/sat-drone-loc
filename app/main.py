@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from app.check import run_self_check
 from app.config import MAX_UPLOAD_BYTES, OFFLINE_DIR, ROOT
 from app.geo import gsd_m, pixel_to_lonlat, select_zoom
+from app.geocode import search_places
 from app.jobs import create_job, job_dir, load_meta, load_mosaic, save_meta
 from app.localize import localize, map_query_pixel
 from app.mosaic import build_mosaic
@@ -83,6 +84,16 @@ def index():
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/api/geocode")
+def geocode(q: str = ""):
+    try:
+        return search_places(q)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(502, str(exc)) from exc
 
 
 @app.get("/api/targets")

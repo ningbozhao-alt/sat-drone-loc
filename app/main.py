@@ -77,7 +77,7 @@ class TargetBody(BaseModel):
 
 @app.get("/")
 def index():
-    return FileResponse(STATIC / "index.html")
+    return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/health")

@@ -62,6 +62,64 @@
     .seg button.on { background: var(--amber); color: #1c1404; outline: none; font-weight: 650; }
     .seg button.on:hover { background: #e2a322; }
     #map { grid-column: 1; grid-row: 2; min-height: 0; height: 100%; }
+    #aoi-banner {
+      position: absolute;
+      z-index: 20;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+      padding: 6px 12px;
+      border: 1px solid var(--amber);
+      border-radius: 6px;
+      background: rgba(16, 22, 20, 0.94);
+      color: #fff;
+      font: 650 15px/1.35 "Segoe UI", "Microsoft YaHei", sans-serif;
+      white-space: nowrap;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+    }
+    #aoi-banner.bad { color: #ffd0cb; border-color: var(--danger); }
+    #aoi-size {
+      pointer-events: none;
+      padding: 4px 8px;
+      border: 1px solid var(--amber);
+      border-radius: 4px;
+      background: rgba(16, 22, 20, 0.94);
+      color: #fff;
+      font: 650 13px/1.35 "Segoe UI", "Microsoft YaHei", sans-serif;
+      white-space: pre;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    }
+    #aoi-size.bad { color: #ffd0cb; border-color: var(--danger); }
+    .aoi-meters {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #101614;
+      font-size: 15px;
+      font-weight: 650;
+    }
+    .aoi-meters.bad { color: var(--danger); border-color: #8a4038; }
+    .aoi-meters.ok { color: var(--green); border-color: #2f6b4c; }
+    #ctx-menu {
+      position: fixed;
+      z-index: 40;
+      min-width: 128px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #17211c;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+    #ctx-menu button {
+      flex: none;
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: 4px;
+      background: transparent;
+      text-align: left;
+    }
     aside {
       grid-column: 2;
       grid-row: 2;
@@ -306,7 +364,11 @@
       <button id="draw" type="button">画任务区</button>
       <button id="build" class="primary" type="button">建立搜索底图</button>
     </div>
+    <div class="aoi-meters" id="aoi-meters">拖出矩形后显示东西、南北距离</div>
     <div class="bbox" id="bbox">尚未画矩形</div>
+    <div id="ctx-menu" hidden>
+      <button id="ctx-report" type="button">目标上报</button>
+    </div>
     <div class="row" style="margin-top:8px">
       <button id="clear" type="button">清除标绘</button>
     </div>
@@ -405,6 +467,16 @@
       maxPitch: 70
     });
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-left");
+    const aoiBanner = document.createElement("div");
+    aoiBanner.id = "aoi-banner";
+    aoiBanner.hidden = true;
+    map.getContainer().appendChild(aoiBanner);
+    const aoiSize = document.createElement("div");
+    aoiSize.id = "aoi-size";
+    const aoiSizeMarker = new maplibregl.Marker({ element: aoiSize, anchor: "bottom", offset: [0, -10] });
+    map.on("move", () => {
+      if (aoi) renderAoiReadout(aoi);
+    });
     document.querySelector("#panel-toggle").addEventListener("click", () => {
       const hidden = document.body.classList.toggle("panel-hidden");
       const toggle = document.querySelector("#panel-toggle");
@@ -487,6 +559,11 @@
         }
       });
       for (const layerId of ["center", "target"]) {
+        map.on("contextmenu", layerId, (event) => {
+          if (!event.features || !event.features.length) return;
+          event.preventDefault();
+          openReportMenu(event.originalEvent.clientX, event.originalEvent.clientY, event.features[0].properties);
+        });
         map.on("click", layerId, (event) => {
           if (drawMode || !event.features || !event.features.length) return;
           openPointPopup(event.lngLat, event.features[0].properties.id);
@@ -599,14 +676,81 @@
       ];
     }
 
+    function haversineMeters(lon1, lat1, lon2, lat2) {
+      const radius = 6378137;
+      const rad = Math.PI / 180;
+      const dLat = (lat2 - lat1) * rad;
+      const dLon = (lon2 - lon1) * rad;
+      const h = Math.sin(dLat / 2) ** 2
+        + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+      return 2 * radius * Math.asin(Math.min(1, Math.sqrt(h)));
+    }
+
+    function formatSpan(meters) {
+      if (meters < 1000) return `${Math.round(meters)} m`;
+      return `${(meters / 1000).toFixed(2)} km`;
+    }
+
+    function searchFit(box) {
+      const lat = (box.south + box.north) / 2;
+      const scale = Math.abs(Math.cos(lat * Math.PI / 180));
+      const metersPerPx0 = (2 * Math.PI * 6378137) / 256;
+      let sawLarge = false;
+      let sawSmall = false;
+      const latToY = (value, n) => {
+        const sine = Math.sin(Math.max(-85.051128, Math.min(85.051128, value)) * Math.PI / 180);
+        const merc = Math.log((1 + sine) / (1 - sine)) / 2;
+        return (1 - merc / Math.PI) / 2 * n;
+      };
+      for (let zoom = 19; zoom >= 10; zoom -= 1) {
+        const gsd = scale * metersPerPx0 / (2 ** zoom);
+        if (gsd < 0.45 || gsd > 2.2) continue;
+        const n = 2 ** zoom;
+        const x0 = Math.floor((box.west + 180) / 360 * n);
+        const x1 = Math.floor((Math.min(box.east, 179.999999) + 180) / 360 * n);
+        const yNorth = latToY(box.north, n);
+        const ySouth = latToY(box.south, n);
+        const width = (x1 - x0 + 1) * 256;
+        const height = (Math.floor(Math.max(yNorth, ySouth)) - Math.floor(Math.min(yNorth, ySouth)) + 1) * 256;
+        if (width > 8192 || height > 8192) sawLarge = true;
+        else if (width < 64 || height < 64) sawSmall = true;
+        else return "ok";
+      }
+      if (sawLarge) return "large";
+      if (sawSmall) return "small";
+      return "large";
+    }
+
+    function renderAoiReadout(box) {
+      const midLat = (box.south + box.north) / 2;
+      const midLon = (box.west + box.east) / 2;
+      const eastWest = haversineMeters(box.west, midLat, box.east, midLat);
+      const northSouth = haversineMeters(midLon, box.south, midLon, box.north);
+      const fit = searchFit(box);
+      const summary = `东西 ${formatSpan(eastWest)}  ×  南北 ${formatSpan(northSouth)}`;
+      const note = fit === "large" ? "超出可搜索范围" : (fit === "small" ? "范围过小" : "");
+      const metersEl = document.querySelector("#aoi-meters");
+      metersEl.textContent = note ? `${summary}，${note}` : summary;
+      metersEl.classList.toggle("bad", fit !== "ok");
+      metersEl.classList.toggle("ok", fit === "ok");
+      bboxEl.textContent = `W ${box.west.toFixed(5)}   E ${box.east.toFixed(5)}\nS ${box.south.toFixed(5)}   N ${box.north.toFixed(5)}`;
+      const banner = document.querySelector("#aoi-banner");
+      banner.textContent = note ? `${summary}  ${note}` : summary;
+      banner.classList.toggle("bad", fit !== "ok");
+      banner.hidden = false;
+      aoiSize.textContent = note ? `${summary}\n${note}` : summary;
+      aoiSize.classList.toggle("bad", fit !== "ok");
+      aoiSizeMarker.setLngLat([(box.west + box.east) / 2, (box.south + box.north) / 2]).addTo(map);
+    }
+
     function showAoi(box) {
+      renderAoiReadout(box);
       if (!map.getSource("aoi")) return;
       map.getSource("aoi").setData({
         type: "Feature",
         geometry: { type: "Polygon", coordinates: [ring(box)] },
         properties: {}
       });
-      bboxEl.textContent = `W ${box.west.toFixed(5)}\nS ${box.south.toFixed(5)}\nE ${box.east.toFixed(5)}\nN ${box.north.toFixed(5)}`;
     }
 
     function boundsOf(a, b) {
@@ -626,15 +770,22 @@
       else map.dragPan.enable();
     });
 
+    function trackAoi(lngLat) {
+      if (!dragStart || !lngLat) return;
+      aoi = boundsOf(dragStart, lngLat);
+      showAoi(aoi);
+    }
+
     map.on("mousedown", (event) => {
-      if (!drawMode) return;
+      if (!drawMode || event.originalEvent.button !== 0) return;
       dragStart = event.lngLat;
       map.dragPan.disable();
     });
-    map.on("mousemove", (event) => {
-      if (!dragStart) return;
-      aoi = boundsOf(dragStart, event.lngLat);
-      showAoi(aoi);
+    map.on("mousemove", (event) => trackAoi(event.lngLat));
+    window.addEventListener("pointermove", (event) => {
+      if (!dragStart || event.buttons === 0) return;
+      const rect = map.getCanvas().getBoundingClientRect();
+      trackAoi(map.unproject([event.clientX - rect.left, event.clientY - rect.top]));
     });
     window.addEventListener("mouseup", (event) => {
       if (!dragStart) return;
@@ -715,6 +866,11 @@
         element.addEventListener("click", (event) => {
           event.stopPropagation();
           openPointPopup(feature.geometry.coordinates, props.id);
+        });
+        element.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openReportMenu(event.clientX, event.clientY, props);
         });
         const marker = new maplibregl.Marker({ element: element, anchor: "left" })
           .setLngLat(feature.geometry.coordinates)
@@ -834,6 +990,10 @@
           if (event.target.closest("button")) return;
           focusTarget(item.id);
         });
+        row.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          openReportMenu(event.clientX, event.clientY, item);
+        });
         row.querySelector("button").addEventListener("click", (event) => {
           event.stopPropagation();
           removeSavedTarget(item.id);
@@ -849,6 +1009,55 @@
       map.flyTo({ center: [item.lon, item.lat], zoom: Math.max(map.getZoom(), 15) });
       openPointPopup([item.lon, item.lat], feature.properties.id);
     }
+
+    let reportSubject = null;
+
+    function subjectFromProps(props) {
+      const saved = savedTargets.find((item) => item.id === props.targetId || item.id === props.id);
+      if (saved) return saved;
+      return {
+        id: props.targetId || props.id,
+        name: props.name || "",
+        note: props.note || "",
+        lon: Number(props.lon),
+        lat: Number(props.lat),
+        kind: props.kind || "target"
+      };
+    }
+
+    function openReportMenu(x, y, props) {
+      reportSubject = subjectFromProps(props);
+      const menu = document.querySelector("#ctx-menu");
+      menu.hidden = false;
+      const width = 140;
+      const height = 42;
+      menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - width))}px`;
+      menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - height))}px`;
+    }
+
+    function closeReportMenu() {
+      document.querySelector("#ctx-menu").hidden = true;
+      reportSubject = null;
+    }
+
+    function submitTargetReport(_item) {
+      // 上报协议尚未确定，先不发送。
+    }
+
+    document.querySelector("#ctx-report").addEventListener("click", () => {
+      const item = reportSubject;
+      closeReportMenu();
+      if (!item) return;
+      submitTargetReport(item);
+      setStatus(`「${item.name || "目标"}」上报协议尚未接入`);
+    });
+    window.addEventListener("pointerdown", (event) => {
+      const menu = document.querySelector("#ctx-menu");
+      if (!menu.hidden && !menu.contains(event.target)) closeReportMenu();
+    });
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeReportMenu();
+    });
 
     async function removeSavedTarget(id) {
       const response = await fetch("/api/targets/" + id, { method: "DELETE" });
@@ -891,6 +1100,11 @@
       const aoiSource = map.getSource("aoi");
       if (aoiSource) aoiSource.setData(emptyCollection());
       bboxEl.textContent = "尚未画矩形";
+      const metersEl = document.querySelector("#aoi-meters");
+      metersEl.textContent = "拖出矩形后显示东西、南北距离";
+      metersEl.classList.remove("bad", "ok");
+      document.querySelector("#aoi-banner").hidden = true;
+      aoiSizeMarker.remove();
       clearMarks();
       resultEl.textContent = "";
       shot.removeAttribute("src");
